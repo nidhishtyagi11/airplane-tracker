@@ -107,11 +107,16 @@ export class Renderer {
     this.infoPanelOpacity = 0;
     this.lastTime = performance.now();
     this.dpr = 1;
+    this.uiScale = 1;
     this.tickerItems = [];
     this.tickerScroll = 0;
     this.tickerVisibleItems = []; // for hit testing
     this.flipped = false;
     this.flipBtnBounds = null;
+
+    // Offscreen canvas for frosted glass blur
+    this._blurCanvas = document.createElement('canvas');
+    this._blurCtx = this._blurCanvas.getContext('2d');
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -154,10 +159,14 @@ export class Renderer {
     this.cx = this.canvas.width / 2;
     this.cy = this.canvas.height / 2;
     this.maxRadius = Math.min(this.cx, this.cy) * 0.65;
+    // Scale UI proportionally for large screens (e.g. 70"+ TVs at 4K/1080p)
+    this.uiScale = Math.max(1, Math.min(2.5, window.innerWidth / 1440));
+    this._blurCanvas.width = this.canvas.width;
+    this._blurCanvas.height = this.canvas.height;
   }
 
   arrowHitTest(mx, my) {
-    let best = null, bestD = HIT_RADIUS * this.dpr;
+    let best = null, bestD = HIT_RADIUS * this.dpr * this.uiScale;
     for (const [hex, a] of this.arrows) {
       const dx = mx - a.tipX, dy = my - a.tipY;
       const d = Math.sqrt(dx * dx + dy * dy);
@@ -318,6 +327,7 @@ export class Renderer {
   // ── Arrows ───────────────────────────────
   drawArrow(ar, isActive, isFaded) {
     const { ctx, dpr } = this;
+    const s = dpr * this.uiScale;
     const relBearing = ar.bearing - APT.heading;
     const angleRad = (relBearing - 90) * (Math.PI / 180);
     const elevClamped = clamp(ar.elevation, 0, 90);
@@ -334,7 +344,7 @@ export class Renderer {
     const drawAngle = this.flipped ? Math.PI - angleRad : angleRad;
 
     const baseSize = ar.inSector ? ARROW_SIZE_ACTIVE : ARROW_SIZE_BG;
-    const size = baseSize * dpr * easeOut(ar.scale);
+    const size = baseSize * s * easeOut(ar.scale);
     if (size < 1) return;
 
     const color = lerpColor(GREY, ORANGE, ar.colorT);
@@ -366,9 +376,10 @@ export class Renderer {
   // ── Center label ─────────────────────────
   drawCenterLabel() {
     const { ctx, cx, cy, dpr } = this;
+    const s = dpr * this.uiScale;
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.font = `600 ${20 * dpr}px ${FONT}`;
+    ctx.font = `600 ${20 * s}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('A1601', cx, cy);
@@ -378,7 +389,8 @@ export class Renderer {
   // ── Clock ────────────────────────────────
   drawClock() {
     const { ctx, dpr } = this;
-    const pad = 32 * dpr;
+    const s = dpr * this.uiScale;
+    const pad = 32 * s;
     const now = new Date();
     let h = now.getHours();
     const m = now.getMinutes().toString().padStart(2, '0');
@@ -390,20 +402,21 @@ export class Renderer {
     ctx.textBaseline = 'top';
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = `700 ${28 * dpr}px ${FONT}`;
+    ctx.font = `700 ${28 * s}px ${FONT}`;
     ctx.fillText(`${h}:${m} ${ampm}`, pad, pad);
 
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = `400 ${13 * dpr}px ${FONT}`;
+    ctx.font = `400 ${13 * s}px ${FONT}`;
     const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    ctx.fillText(dateStr, pad, pad + 36 * dpr);
+    ctx.fillText(dateStr, pad, pad + 36 * s);
     ctx.restore();
   }
 
   // ── Nearby count ─────────────────────────
   drawNearbyCount() {
     const { ctx, dpr } = this;
-    const pad = 32 * dpr;
+    const s = dpr * this.uiScale;
+    const pad = 32 * s;
     const count = [...this.arrows.values()].filter(a => a.inSector && !a.exiting).length;
     let text;
     if (count === 0) text = 'No airplanes nearby';
@@ -412,22 +425,23 @@ export class Renderer {
 
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = `400 ${13 * dpr}px ${FONT}`;
+    ctx.font = `400 ${13 * s}px ${FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(text, pad, pad + 58 * dpr);
+    ctx.fillText(text, pad, pad + 58 * s);
     ctx.restore();
   }
 
   // ── Ticker (top-right) ───────────────────
   drawTicker() {
     const { ctx, canvas, dpr } = this;
+    const s = dpr * this.uiScale;
     const activeItems = this.tickerItems.filter(it => !it.exiting);
     const exitingItems = this.tickerItems.filter(it => it.exiting);
 
-    const pad = 32 * dpr;
-    const boxW = 180 * dpr;            // fixed width for the ticker column
-    const headH = TICKER_HEADING_H * dpr;
+    const pad = 32 * s;
+    const boxW = 180 * s;
+    const headH = TICKER_HEADING_H * s;
     const boxRight = canvas.width - pad;
     const boxLeft = boxRight - boxW;
     const boxCenterX = boxLeft + boxW / 2;
@@ -438,19 +452,19 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = `500 ${14 * dpr}px ${FONT}`;
+    ctx.font = `500 ${14 * s}px ${FONT}`;
     const headingText = 'Flights';
     const headingW = ctx.measureText(headingText).width;
-    const headingGroupW = headingW + 20 * dpr; // text + gap + arrow
+    const headingGroupW = headingW + 20 * s; // text + gap + arrow
     const headingStartX = boxCenterX - headingGroupW / 2;
     ctx.textAlign = 'left';
     ctx.fillText(headingText, headingStartX, startY);
     // Draw ↗ arrow
-    const arrowX = headingStartX + headingW + 16 * dpr;
-    const arrowY = startY + 3 * dpr;
-    const arrowS = 11 * dpr;
+    const arrowX = headingStartX + headingW + 16 * s;
+    const arrowY = startY + 3 * s;
+    const arrowS = 11 * s;
     ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineWidth = 1.5 * s;
     ctx.beginPath();
     ctx.moveTo(arrowX - arrowS, arrowY + arrowS);
     ctx.lineTo(arrowX, arrowY);
@@ -459,10 +473,10 @@ export class Renderer {
     ctx.lineTo(arrowX, arrowY + arrowS * 0.55);
     ctx.stroke();
     // Underline beneath heading
-    const underlineY = startY + 20 * dpr;
-    const underlineW = headingGroupW + 4 * dpr;
+    const underlineY = startY + 20 * s;
+    const underlineW = headingGroupW + 4 * s;
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(boxCenterX - underlineW / 2, underlineY, underlineW, 1 * dpr);
+    ctx.fillRect(boxCenterX - underlineW / 2, underlineY, underlineW, 1 * s);
     ctx.restore();
 
     if (activeItems.length === 0 && exitingItems.length === 0) {
@@ -471,9 +485,9 @@ export class Renderer {
     }
 
     const itemStartY = startY + headH;
-    const maxH = Math.min(canvas.height * 0.45, 6 * TICKER_ITEM_H_FULL * dpr);
+    const maxH = Math.min(canvas.height * 0.45, 6 * TICKER_ITEM_H_FULL * s);
     const { offsets, totalH } = tickerOffsets(activeItems);
-    const totalHpx = totalH * dpr;
+    const totalHpx = totalH * s;
     const visibleItems = [];
 
     ctx.save();
@@ -483,11 +497,11 @@ export class Renderer {
 
     if (totalHpx > 0) {
       if (totalHpx > maxH) {
-        const scrollMod = (this.tickerScroll * dpr) % totalHpx;
+        const scrollMod = (this.tickerScroll * s) % totalHpx;
         for (let copy = -1; copy <= 1; copy++) {
           for (let i = 0; i < activeItems.length; i++) {
-            const ih = tickerItemH(activeItems[i]) * dpr;
-            const y = itemStartY + offsets[i] * dpr - scrollMod + copy * totalHpx;
+            const ih = tickerItemH(activeItems[i]) * s;
+            const y = itemStartY + offsets[i] * s - scrollMod + copy * totalHpx;
             if (y < itemStartY - ih || y > itemStartY + maxH) continue;
             this.drawTickerItem(boxCenterX, boxLeft, boxRight, y, activeItems[i]);
             visibleItems.push({
@@ -500,8 +514,8 @@ export class Renderer {
         }
       } else {
         for (let i = 0; i < activeItems.length; i++) {
-          const ih = tickerItemH(activeItems[i]) * dpr;
-          const y = itemStartY + offsets[i] * dpr;
+          const ih = tickerItemH(activeItems[i]) * s;
+          const y = itemStartY + offsets[i] * s;
           this.drawTickerItem(boxCenterX, boxLeft, boxRight, y, activeItems[i]);
           visibleItems.push({
             hex: activeItems[i].hex,
@@ -515,7 +529,7 @@ export class Renderer {
     for (const item of exitingItems) {
       const idx = this.tickerItems.indexOf(item);
       const { offsets: exitOffsets } = tickerOffsets(this.tickerItems.slice(0, idx + 1));
-      const y = itemStartY + (exitOffsets[idx] || 0) * dpr;
+      const y = itemStartY + (exitOffsets[idx] || 0) * s;
       if (y < itemStartY + maxH) this.drawTickerItem(boxCenterX, boxLeft, boxRight, y, item);
     }
 
@@ -525,12 +539,13 @@ export class Renderer {
 
   drawTickerItem(centerX, boxLeft, boxRight, y, item) {
     const { ctx, dpr } = this;
+    const s = dpr * this.uiScale;
     const alpha = item.opacity;
     if (alpha < 0.01) return;
 
     const activeHex = this.selectedHex || this.hoveredHex;
     const isHighlighted = item.hex === activeHex;
-    const ih = tickerItemH(item) * dpr;
+    const ih = tickerItemH(item) * s;
     const hasRoute = !!(item.from && item.to);
 
     ctx.save();
@@ -541,21 +556,21 @@ export class Renderer {
     // Glow on hover/select — shadowBlur creates the soft light effect
     if (isHighlighted) {
       ctx.shadowColor = 'rgba(255,255,255,0.9)';
-      ctx.shadowBlur = 12 * dpr;
+      ctx.shadowBlur = 12 * s;
     }
 
     // Vertically center flight code when there's no route
-    const flightY = hasRoute ? y + 6 * dpr : y + (ih - 16 * dpr) / 2;
+    const flightY = hasRoute ? y + 6 * s : y + (ih - 16 * s) / 2;
 
     ctx.fillStyle = isHighlighted ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.85)';
-    ctx.font = `600 ${15 * dpr}px ${FONT}`;
+    ctx.font = `600 ${15 * s}px ${FONT}`;
     ctx.fillText(item.flight || '—', centerX, flightY);
 
     if (hasRoute) {
-      ctx.shadowBlur = isHighlighted ? 8 * dpr : 0;
+      ctx.shadowBlur = isHighlighted ? 8 * s : 0;
       ctx.fillStyle = isHighlighted ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)';
-      ctx.font = `400 ${12 * dpr}px ${FONT}`;
-      ctx.fillText(`${item.from} → ${item.to}`, centerX, y + 28 * dpr);
+      ctx.font = `400 ${12 * s}px ${FONT}`;
+      ctx.fillText(`${item.from} → ${item.to}`, centerX, y + 28 * s);
     }
 
     ctx.shadowBlur = 0;
@@ -563,8 +578,8 @@ export class Renderer {
     // Separator line — centered
     ctx.globalAlpha = alpha * 0.08;
     ctx.fillStyle = '#fff';
-    const lineW = TICKER_LINE_W * dpr;
-    ctx.fillRect(centerX - lineW / 2, y + ih - 1 * dpr, lineW, 1 * dpr);
+    const lineW = TICKER_LINE_W * s;
+    ctx.fillRect(centerX - lineW / 2, y + ih - 1 * s, lineW, 1 * s);
 
     ctx.restore();
   }
@@ -579,11 +594,12 @@ export class Renderer {
     const ac = ar.ac;
     const route = ar.route;
     const { ctx, canvas, dpr } = this;
+    const s = dpr * this.uiScale;
     const a = this.infoPanelOpacity;
 
-    const cardW = 340 * dpr;
-    const cardPad = 24 * dpr;
-    const cardX = 32 * dpr;
+    const cardW = 340 * s;
+    const cardPad = 24 * s;
+    const cardX = 32 * s;
 
     const flight = (ac.flight || '').trim() || ac.hex;
     const airline = getAirline(ac.flight);
@@ -593,21 +609,21 @@ export class Renderer {
 
     // Pre-compute wrapped lines so card height can account for them
     const col2X_pre = (cardX + cardPad) + (cardW - cardPad * 2) * 0.52;
-    const col1MaxW = col2X_pre - (cardX + cardPad) - 8 * dpr;
+    const col1MaxW = col2X_pre - (cardX + cardPad) - 8 * s;
     const col2MaxW = (cardX + cardW - cardPad) - col2X_pre;
-    const lineH = 16 * dpr;
-    const cityLineH = 16 * dpr;
+    const lineH = 16 * s;
+    const cityLineH = 16 * s;
 
     ctx.save();
-    ctx.font = `500 ${14 * dpr}px ${FONT}`;
+    ctx.font = `500 ${14 * s}px ${FONT}`;
     const airlineLines = wrapText(ctx, airline || '—', col1MaxW);
     const modelLines   = wrapText(ctx, model,          col2MaxW);
     let cityLineCount = 0;
     if (hasRoute) {
       const originCity = route.origin.municipality || route.origin.name || '';
       const destCity = route.destination.municipality || route.destination.name || '';
-      ctx.font = `400 ${12 * dpr}px ${FONT}`;
-      const cityMaxW = (cardX + cardW - cardPad) - (cardX + cardPad + 24 * dpr);
+      ctx.font = `400 ${12 * s}px ${FONT}`;
+      const cityMaxW = (cardX + cardW - cardPad) - (cardX + cardPad + 24 * s);
       cityLineCount = wrapText(ctx, `${originCity}  →  ${destCity}`, cityMaxW).length;
     }
     ctx.restore();
@@ -615,27 +631,43 @@ export class Renderer {
     const colRows = Math.max(airlineLines.length, modelLines.length);
 
     // Calculate card height
-    let cardH = cardPad + 14 * dpr + 14 * dpr + 40 * dpr; // header + flight code
+    let cardH = cardPad + 14 * s + 14 * s + 40 * s; // header + flight code
     if (hasRoute) {
-      cardH += 18 * dpr + 14 * dpr + 8 * dpr;    // ROUTE label
-      cardH += 24 * dpr;                           // airport codes line
-      cardH += cityLineCount * cityLineH;          // city names (wrapped)
+      cardH += 18 * s + 14 * s + 8 * s;    // ROUTE label
+      cardH += 24 * s;                       // airport codes line
+      cardH += cityLineCount * cityLineH;    // city names (wrapped)
     }
-    cardH += 22 * dpr + 14 * dpr + 6 * dpr;        // AIRLINE/AIRCRAFT labels
-    cardH += colRows * lineH;                        // wrapped value rows
-    cardH += 22 * dpr + 14 * dpr + 6 * dpr + 20 * dpr; // PROXIMITY label + value
+    cardH += 22 * s + 14 * s + 6 * s;        // AIRLINE/AIRCRAFT labels
+    cardH += colRows * lineH;                 // wrapped value rows
+    cardH += 22 * s + 14 * s + 6 * s + 20 * s; // PROXIMITY label + value
     cardH += cardPad;
 
-    const cardY = canvas.height - 32 * dpr - cardH;
+    const cardY = canvas.height - 32 * s - cardH;
 
     ctx.save();
     ctx.globalAlpha = a;
 
-    roundRect(ctx, cardX, cardY, cardW, cardH, 14 * dpr);
-    ctx.fillStyle = 'rgba(14, 14, 14, 0.92)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 1 * dpr;
+    // ── Frosted glass background ──────────────
+    // Capture and blur the canvas content behind the panel
+    this._blurCtx.clearRect(0, 0, canvas.width, canvas.height);
+    this._blurCtx.filter = `blur(${18 * dpr}px)`;
+    this._blurCtx.drawImage(canvas, 0, 0);
+    this._blurCtx.filter = 'none';
+
+    // Clip to panel shape, draw blurred bg + dark tint
+    roundRect(ctx, cardX, cardY, cardW, cardH, 14 * s);
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(this._blurCanvas, 0, 0);
+    // Dark tint for readability over the blurred content
+    ctx.fillStyle = 'rgba(8, 10, 18, 0.70)';
+    ctx.fillRect(cardX, cardY, cardW, cardH);
+    ctx.restore();
+
+    // Subtle border
+    roundRect(ctx, cardX, cardY, cardW, cardH, 14 * s);
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+    ctx.lineWidth = 1 * s;
     ctx.stroke();
 
     let x = cardX + cardPad;
@@ -644,58 +676,58 @@ export class Renderer {
 
     // ACTIVE TRACKING
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = `600 ${11 * dpr}px ${FONT}`;
+    ctx.font = `600 ${11 * s}px ${FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('✈  ACTIVE TRACKING', x, y);
-    y += 14 * dpr + 14 * dpr;
+    y += 14 * s + 14 * s;
 
     // Flight code
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = `700 ${32 * dpr}px ${FONT}`;
+    ctx.font = `700 ${32 * s}px ${FONT}`;
     ctx.fillText(flight, x, y);
-    y += 40 * dpr;
+    y += 40 * s;
 
     // Route
     if (hasRoute) {
-      y += 18 * dpr;
+      y += 18 * s;
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = `600 ${11 * dpr}px ${FONT}`;
+      ctx.font = `600 ${11 * s}px ${FONT}`;
       ctx.fillText('ROUTE', x, y);
-      y += 14 * dpr + 8 * dpr;
+      y += 14 * s + 8 * s;
 
       // Route SVG icon
-      const iconSize = 18 * dpr;
-      drawSvgIcon(ctx, routePath, x, y + 1 * dpr, iconSize, 'rgba(255,255,255,0.5)');
+      const iconSize = 18 * s;
+      drawSvgIcon(ctx, routePath, x, y + 1 * s, iconSize, 'rgba(255,255,255,0.5)');
 
       // Airport codes
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.font = `600 ${17 * dpr}px ${FONT}`;
-      ctx.fillText(`${route.origin.iata_code}  →  ${route.destination.iata_code}`, x + 24 * dpr, y);
-      y += 24 * dpr;
+      ctx.font = `600 ${17 * s}px ${FONT}`;
+      ctx.fillText(`${route.origin.iata_code}  →  ${route.destination.iata_code}`, x + 24 * s, y);
+      y += 24 * s;
 
       // City names
       const originCity = route.origin.municipality || route.origin.name || '';
       const destCity = route.destination.municipality || route.destination.name || '';
       ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.font = `400 ${12 * dpr}px ${FONT}`;
-      const cityMaxW = (cardX + cardW - cardPad) - (x + 24 * dpr);
+      ctx.font = `400 ${12 * s}px ${FONT}`;
+      const cityMaxW = (cardX + cardW - cardPad) - (x + 24 * s);
       const cityLines = wrapText(ctx, `${originCity}  →  ${destCity}`, cityMaxW);
-      cityLines.forEach((line, i) => ctx.fillText(line, x + 24 * dpr, y + i * 16 * dpr));
-      y += cityLines.length * 16 * dpr;
+      cityLines.forEach((line, i) => ctx.fillText(line, x + 24 * s, y + i * 16 * s));
+      y += cityLines.length * 16 * s;
     }
 
     // Airline + Aircraft columns
-    y += 22 * dpr;
+    y += 22 * s;
     const col2X = x + contentW * 0.52;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = `600 ${10 * dpr}px ${FONT}`;
+    ctx.font = `600 ${10 * s}px ${FONT}`;
     ctx.fillText('AIRLINE', x, y);
     ctx.fillText('AIRCRAFT', col2X, y);
-    y += 14 * dpr + 6 * dpr;
+    y += 14 * s + 6 * s;
 
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.font = `500 ${14 * dpr}px ${FONT}`;
+    ctx.font = `500 ${14 * s}px ${FONT}`;
     for (let i = 0; i < colRows; i++) {
       if (airlineLines[i]) ctx.fillText(airlineLines[i], x, y + i * lineH);
       if (modelLines[i])   ctx.fillText(modelLines[i],   col2X, y + i * lineH);
@@ -703,19 +735,19 @@ export class Renderer {
     y += colRows * lineH;
 
     // Proximity
-    y += 22 * dpr;
+    y += 22 * s;
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = `600 ${10 * dpr}px ${FONT}`;
+    ctx.font = `600 ${10 * s}px ${FONT}`;
     ctx.fillText('PROXIMITY', x, y);
-    y += 14 * dpr + 6 * dpr;
+    y += 14 * s + 6 * s;
 
     // Proximity SVG icon
-    const proxIconSize = 18 * dpr;
-    drawSvgIcon(ctx, proximityPath, x, y + 1 * dpr, proxIconSize, 'rgba(255,255,255,0.4)');
+    const proxIconSize = 18 * s;
+    drawSvgIcon(ctx, proximityPath, x, y + 1 * s, proxIconSize, 'rgba(255,255,255,0.4)');
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = `500 ${17 * dpr}px ${FONT}`;
-    ctx.fillText(dist, x + 24 * dpr, y);
+    ctx.font = `500 ${17 * s}px ${FONT}`;
+    ctx.fillText(dist, x + 24 * s, y);
 
     ctx.restore();
   }
@@ -723,12 +755,13 @@ export class Renderer {
   // ── Flip button (bottom-right) ────────────
   drawFlipButton() {
     const { ctx, canvas, dpr } = this;
-    const pad = 32 * dpr;
-    const btnW = 52 * dpr;
-    const btnH = 36 * dpr;
+    const s = dpr * this.uiScale;
+    const pad = 32 * s;
+    const btnW = 52 * s;
+    const btnH = 36 * s;
     const btnX = canvas.width - pad - btnW;
     const btnY = canvas.height - pad - btnH;
-    const r = 10 * dpr;
+    const r = 10 * s;
 
     this.flipBtnBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
 
@@ -740,20 +773,20 @@ export class Renderer {
     ctx.fillStyle = isActive ? 'rgba(255,140,0,0.18)' : 'rgba(255,255,255,0.07)';
     ctx.fill();
     ctx.strokeStyle = isActive ? 'rgba(255,140,0,0.5)' : 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1 * dpr;
+    ctx.lineWidth = 1 * s;
     ctx.stroke();
 
     // Flip icon: two horizontal arrows ⇔
     const cx = btnX + btnW / 2;
     const cy = btnY + btnH / 2;
-    const aw = 11 * dpr;  // half-width of each arrow
-    const ah = 4 * dpr;   // arrowhead size
-    const gap = 3 * dpr;  // gap between the two arrows
+    const aw = 11 * s;  // half-width of each arrow
+    const ah = 4 * s;   // arrowhead size
+    const gap = 3 * s;  // gap between the two arrows
     const col = isActive ? `rgba(255,140,0,0.9)` : `rgba(255,255,255,0.6)`;
 
     ctx.strokeStyle = col;
     ctx.fillStyle = col;
-    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineWidth = 1.5 * s;
     ctx.lineCap = 'round';
 
     // Left arrow ←
