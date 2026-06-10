@@ -3,7 +3,7 @@ import { getAirline } from './airlines.js';
 
 const FONT = "'Poppins', system-ui, -apple-system, sans-serif";
 const ORANGE = [255, 140, 0];
-const GREY = [100, 100, 100];
+const GREY = [210, 210, 210];
 
 const ARROW_SHAPE = [[1, 0], [-0.6, -0.78], [-0.12, 0], [-0.6, 0.78]];
 const ARROW_SIZE_ACTIVE = 52;
@@ -12,14 +12,14 @@ const HIT_RADIUS = 50;
 const LERP_SPEED = 0.08;
 const ANIM_SPEED = 3.5;
 const MIN_OPACITY = 0.25;
-const GREY_OPACITY = 0.08;
+const GREY_OPACITY = 0.45;
 
 const TICKER_SPEED = 16;
-const TICKER_ITEM_H_FULL = 56;  // with route
-const TICKER_ITEM_H_SLIM = 36;  // flight code only
-const TICKER_HEADING_H = 36;
+const TICKER_ITEM_H_FULL = 88;  // with route
+const TICKER_ITEM_H_SLIM = 56;  // flight code only
+const TICKER_HEADING_H = 60;
 const TICKER_W = 260;
-const TICKER_LINE_W = 120;
+const TICKER_LINE_W = 200;
 
 function tickerItemH(item) {
   return (item.from && item.to) ? TICKER_ITEM_H_FULL : TICKER_ITEM_H_SLIM;
@@ -402,13 +402,13 @@ export class Renderer {
     ctx.textBaseline = 'top';
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = `700 ${28 * s}px ${FONT}`;
+    ctx.font = `700 ${56 * s}px ${FONT}`;
     ctx.fillText(`${h}:${m} ${ampm}`, pad, pad);
 
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = `400 ${13 * s}px ${FONT}`;
+    ctx.font = `400 ${26 * s}px ${FONT}`;
     const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    ctx.fillText(dateStr, pad, pad + 36 * s);
+    ctx.fillText(dateStr, pad, pad + 72 * s);
     ctx.restore();
   }
 
@@ -425,10 +425,10 @@ export class Renderer {
 
     ctx.save();
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = `400 ${13 * s}px ${FONT}`;
+    ctx.font = `400 ${26 * s}px ${FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(text, pad, pad + 58 * s);
+    ctx.fillText(text, pad, pad + 108 * s);
     ctx.restore();
   }
 
@@ -440,7 +440,7 @@ export class Renderer {
     const exitingItems = this.tickerItems.filter(it => it.exiting);
 
     const pad = 32 * s;
-    const boxW = 180 * s;
+    const boxW = 300 * s;
     const headH = TICKER_HEADING_H * s;
     const boxRight = canvas.width - pad;
     const boxLeft = boxRight - boxW;
@@ -452,19 +452,19 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = `500 ${14 * s}px ${FONT}`;
+    ctx.font = `500 ${28 * s}px ${FONT}`;
     const headingText = 'Flights';
     const headingW = ctx.measureText(headingText).width;
-    const headingGroupW = headingW + 20 * s; // text + gap + arrow
+    const headingGroupW = headingW + 36 * s; // text + gap + arrow
     const headingStartX = boxCenterX - headingGroupW / 2;
     ctx.textAlign = 'left';
     ctx.fillText(headingText, headingStartX, startY);
     // Draw ↗ arrow
-    const arrowX = headingStartX + headingW + 16 * s;
-    const arrowY = startY + 3 * s;
-    const arrowS = 11 * s;
+    const arrowX = headingStartX + headingW + 24 * s;
+    const arrowY = startY + 5 * s;
+    const arrowS = 18 * s;
     ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 1.5 * s;
+    ctx.lineWidth = 2.5 * s;
     ctx.beginPath();
     ctx.moveTo(arrowX - arrowS, arrowY + arrowS);
     ctx.lineTo(arrowX, arrowY);
@@ -473,10 +473,10 @@ export class Renderer {
     ctx.lineTo(arrowX, arrowY + arrowS * 0.55);
     ctx.stroke();
     // Underline beneath heading
-    const underlineY = startY + 20 * s;
+    const underlineY = startY + 38 * s;
     const underlineW = headingGroupW + 4 * s;
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(boxCenterX - underlineW / 2, underlineY, underlineW, 1 * s);
+    ctx.fillRect(boxCenterX - underlineW / 2, underlineY, underlineW, 1.5 * s);
     ctx.restore();
 
     if (activeItems.length === 0 && exitingItems.length === 0) {
@@ -560,17 +560,17 @@ export class Renderer {
     }
 
     // Vertically center flight code when there's no route
-    const flightY = hasRoute ? y + 6 * s : y + (ih - 16 * s) / 2;
+    const flightY = hasRoute ? y + 8 * s : y + (ih - 30 * s) / 2;
 
     ctx.fillStyle = isHighlighted ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.85)';
-    ctx.font = `600 ${15 * s}px ${FONT}`;
+    ctx.font = `600 ${30 * s}px ${FONT}`;
     ctx.fillText(item.flight || '—', centerX, flightY);
 
     if (hasRoute) {
       ctx.shadowBlur = isHighlighted ? 8 * s : 0;
       ctx.fillStyle = isHighlighted ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)';
-      ctx.font = `400 ${12 * s}px ${FONT}`;
-      ctx.fillText(`${item.from} → ${item.to}`, centerX, y + 28 * s);
+      ctx.font = `400 ${22 * s}px ${FONT}`;
+      ctx.fillText(`${item.from} → ${item.to}`, centerX, y + 50 * s);
     }
 
     ctx.shadowBlur = 0;
